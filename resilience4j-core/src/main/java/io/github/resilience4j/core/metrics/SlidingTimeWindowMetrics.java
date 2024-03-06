@@ -94,20 +94,29 @@ public class SlidingTimeWindowMetrics implements Metrics {
      */
     private PartialAggregation moveWindowToCurrentEpochSecond(
         PartialAggregation latestPartialAggregation) {
+        // 取当前时钟的时间，并将其转换为从 1970 年 1 月 1 日 00:00:00 UTC 开始计算的秒数
         long currentEpochSecond = clock.instant().getEpochSecond();
+        // 差异秒数
         long differenceInSeconds = currentEpochSecond - latestPartialAggregation.getEpochSecond();
         if (differenceInSeconds == 0) {
             return latestPartialAggregation;
         }
+
+        // 需要移动的秒数
         long secondsToMoveTheWindow = Math.min(differenceInSeconds, timeWindowSizeInSeconds);
         PartialAggregation currentPartialAggregation;
         do {
+            // 移动头指针
             secondsToMoveTheWindow--;
             moveHeadIndexByOne();
+            // 获取最新的 PartialAggregation
             currentPartialAggregation = getLatestPartialAggregation();
+            // 从总聚合中移除当前 PartialAggregation
             totalAggregation.removeBucket(currentPartialAggregation);
+            // 重置当前的 PartialAggregation 并设置当前对应的秒数
             currentPartialAggregation.reset(currentEpochSecond - secondsToMoveTheWindow);
         } while (secondsToMoveTheWindow > 0);
+
         return currentPartialAggregation;
     }
 

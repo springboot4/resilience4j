@@ -26,8 +26,8 @@ import java.util.function.Supplier;
 import static java.util.stream.Collectors.toMap;
 
 /**
- * Abstraction to retrieve, copy and clean up values across thread boundary. This class is
- * specifically use for propagating {@link ThreadLocal} across different thread boundaries.
+ *抽象以跨线程边界检索、复制和清理值。这节课是
+ *专门用于跨不同线程边界传播{@link ThreadLocal}。
  *
  * @param <T> value type that is copied across thread boundary.
  */

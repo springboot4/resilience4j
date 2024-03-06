@@ -248,6 +248,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
             publishCircuitIgnoredErrorEvent(name, duration, durationUnit, throwable);
             return;
         }
+
         // 如果记录异常
         if (circuitBreakerConfig.getRecordExceptionPredicate().test(throwable)) {
             LOG.debug("CircuitBreaker '{}' recorded an exception as failure:", name, throwable);
@@ -277,14 +278,16 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
     @Override
     public void onResult(long duration, TimeUnit durationUnit, @Nullable Object result) {
-        // 如果记录结果
+        // 如果记录结果为失败
         if (result != null && circuitBreakerConfig.getRecordResultPredicate().test(result)) {
             LOG.debug("CircuitBreaker '{}' recorded a result type '{}' as failure:", name, result.getClass());
             ResultRecordedAsFailureException failure = new ResultRecordedAsFailureException(name, result);
             publishCircuitErrorEvent(name, duration, durationUnit, failure);
+
             // 记录调用指标 并检查是否需要过渡状态
             stateReference.get().onError(duration, durationUnit, failure);
         } else {
+            // 调用onSuccess
             onSuccess(duration, durationUnit);
             if (result != null) {
                 handlePossibleTransition(Either.left(result));
@@ -764,27 +767,29 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
          */
         @Override
         public boolean tryAcquirePermission() {
-            // Check if the wait duration has elapsed
+            // 检查等待时间是否已过 可以由打开状态过渡到半开状态
             if (clock.instant().isAfter(retryAfterWaitDuration)) {
-                // Transition to HALF_OPEN state
+                //  过渡到半开状态
                 toHalfOpenState();
-                // Check if the call is allowed to run in HALF_OPEN state after state transition
-                // super.tryAcquirePermission() doesn't work right that's why the code is copied
+                // 检查状态转换后是否允许调用在HALF_OPEN状态下运行
                 boolean callPermitted = stateReference.get().tryAcquirePermission();
                 if (!callPermitted) {
+                    // 如果不允许调用 发布不允许调用事件
                     publishCallNotPermittedEvent();
+                    // 记录不允许调用指标
                     circuitBreakerMetrics.onCallNotPermitted();
                 }
                 return callPermitted;
             }
 
-            // Wait duration has not elapsed
+            // 如果等待时间未过 则不允许调用 返回false
             circuitBreakerMetrics.onCallNotPermitted();
             return false;
         }
 
         @Override
         public void acquirePermission() {
+            // 尝试获取执行权限
             if (!tryAcquirePermission()) {
                 throw CallNotPermittedException
                     .createCallNotPermittedException(CircuitBreakerStateMachine.this);
@@ -1150,6 +1155,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
         @Override
         public void acquirePermission() {
+            // 半开状态下 需要根据允许的调用次数来判断是否可以调用
             if (!tryAcquirePermission()) {
                 throw CallNotPermittedException
                     .createCallNotPermittedException(CircuitBreakerStateMachine.this);

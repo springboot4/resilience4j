@@ -32,6 +32,9 @@ import java.util.concurrent.atomic.LongAdder;
 
 import static io.github.resilience4j.core.metrics.Metrics.Outcome;
 
+/**
+ * 断路器指标
+ */
 class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
 
     private final Metrics metrics;
@@ -110,10 +113,14 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
     public Result onSuccess(long duration, TimeUnit durationUnit) {
         Snapshot snapshot;
         if (durationUnit.toNanos(duration) > slowCallDurationThresholdInNanos) {
+            // 记录慢速成功调用
             snapshot = metrics.record(duration, durationUnit, Outcome.SLOW_SUCCESS);
         } else {
+            // 记录成功调用
             snapshot = metrics.record(duration, durationUnit, Outcome.SUCCESS);
         }
+
+        // 检查故障率是否高于阈值或慢速呼叫百分比是否高于阈值
         return checkIfThresholdsExceeded(snapshot);
     }
 
@@ -125,17 +132,19 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
     public Result onError(long duration, TimeUnit durationUnit) {
         Snapshot snapshot;
         if (durationUnit.toNanos(duration) > slowCallDurationThresholdInNanos) {
+            // 记录慢速调用
             snapshot = metrics.record(duration, durationUnit, Outcome.SLOW_ERROR);
         } else {
+            // 记录失败调用
             snapshot = metrics.record(duration, durationUnit, Outcome.ERROR);
         }
 
+        // 检查故障率是否高于阈值或慢速呼叫百分比是否高于阈值
         return checkIfThresholdsExceeded(snapshot);
     }
 
     /**
      * 检查故障率是否高于阈值或慢速呼叫百分比是否高于阈值
-     * 阈值。
      *
      * @param snapshot a metrics snapshot
      * @return false, if the thresholds haven't been exceeded.

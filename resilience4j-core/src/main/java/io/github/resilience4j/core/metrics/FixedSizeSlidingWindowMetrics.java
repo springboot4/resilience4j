@@ -22,6 +22,7 @@ package io.github.resilience4j.core.metrics;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 固定大小的滑动窗口
  * A {@link Metrics} implementation is backed by a sliding window that aggregates only the last
  * {@code N} calls.
  * <p>
