@@ -40,7 +40,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A Bulkhead implementation based on a semaphore.
+ * 一种基于信号量的Bulkhead实现。
  */
 public class SemaphoreBulkhead implements Bulkhead {
 

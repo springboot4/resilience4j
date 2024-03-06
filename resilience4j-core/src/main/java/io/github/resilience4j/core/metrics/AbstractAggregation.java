@@ -29,20 +29,27 @@ class AbstractAggregation {
     int numberOfCalls = 0;
 
     void record(long duration, TimeUnit durationUnit, Metrics.Outcome outcome) {
+        // 调用次数递增
         this.numberOfCalls++;
+        // 总调用时长
         this.totalDurationInMillis += durationUnit.toMillis(duration);
         switch (outcome) {
             case SLOW_SUCCESS:
+                // 慢调用次数加一
                 numberOfSlowCalls++;
                 break;
 
             case SLOW_ERROR:
+                // 慢调用次数加一
                 numberOfSlowCalls++;
+                // 调用失败次数加一
                 numberOfFailedCalls++;
+                // 慢调用失败次数加一
                 numberOfSlowFailedCalls++;
                 break;
 
             case ERROR:
+                // 调用失败次数加一
                 numberOfFailedCalls++;
                 break;
 

@@ -71,6 +71,9 @@ public class CircuitBreakerConfig implements Serializable {
     @SuppressWarnings("unchecked")
     private Class<? extends Throwable>[] ignoreExceptions = new Class[0];
 
+    /**
+     *  故障率阈值
+     */
     private float failureRateThreshold = DEFAULT_FAILURE_RATE_THRESHOLD;
     private int permittedNumberOfCallsInHalfOpenState = DEFAULT_PERMITTED_CALLS_IN_HALF_OPEN_STATE;
     private int slidingWindowSize = DEFAULT_SLIDING_WINDOW_SIZE;

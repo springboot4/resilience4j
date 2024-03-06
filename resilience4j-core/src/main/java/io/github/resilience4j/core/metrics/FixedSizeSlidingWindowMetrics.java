@@ -58,10 +58,20 @@ public class FixedSizeSlidingWindowMetrics implements Metrics {
         this.totalAggregation = new TotalAggregation();
     }
 
+    /**
+     * 记录调用的持续时间和结果。
+     *
+     * @param duration     the duration of the call
+     * @param durationUnit the time unit of the duration
+     * @param outcome      the outcome of the call
+     */
     @Override
     public synchronized Snapshot record(long duration, TimeUnit durationUnit, Outcome outcome) {
+        // 记录到总聚合中
         totalAggregation.record(duration, durationUnit, outcome);
+        // 移动窗口并记录到最新的bucket中
         moveWindowByOne().record(duration, durationUnit, outcome);
+        // 返回快照
         return new SnapshotImpl(totalAggregation);
     }
 
@@ -70,15 +80,19 @@ public class FixedSizeSlidingWindowMetrics implements Metrics {
     }
 
     private Measurement moveWindowByOne() {
+        // 移动headIndex到下一个bucket
         moveHeadIndexByOne();
+        // 移除最新的bucket
         Measurement latestMeasurement = getLatestMeasurement();
+        // 从总聚合中移除最新的bucket
         totalAggregation.removeBucket(latestMeasurement);
+        // 重置最新的bucket
         latestMeasurement.reset();
         return latestMeasurement;
     }
 
     /**
-     * Returns the head partial aggregation of the circular array.
+     * 返回循环数组的头部分聚合。
      *
      * @return the head partial aggregation of the circular array
      */

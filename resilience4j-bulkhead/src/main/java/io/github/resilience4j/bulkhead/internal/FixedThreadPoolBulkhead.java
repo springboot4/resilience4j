@@ -289,7 +289,7 @@ public class FixedThreadPoolBulkhead implements ThreadPoolBulkhead {
     }
 
     /**
-     * the thread pool bulk head metrics
+     * 线程池大容量头度量
      */
     private final class BulkheadMetrics implements Metrics {
 

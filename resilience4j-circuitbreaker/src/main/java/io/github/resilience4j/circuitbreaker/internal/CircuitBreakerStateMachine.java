@@ -50,7 +50,7 @@ import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.util.Collections.emptyMap;
 
 /**
- * A CircuitBreaker finite state machine.
+ * 断路器有限状态机
  */
 public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
@@ -188,8 +188,10 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
     @Override
     public boolean tryAcquirePermission() {
+        // 获取当前状态是否可以调用
         boolean callPermitted = stateReference.get().tryAcquirePermission();
         if (!callPermitted) {
+            // 发布不可调用事件
             publishCallNotPermittedEvent();
         }
         return callPermitted;
@@ -197,12 +199,14 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
     @Override
     public void releasePermission() {
+        // 释放权限
         stateReference.get().releasePermission();
     }
 
     @Override
     public void acquirePermission() {
         try {
+            // 获取权限
             stateReference.get().acquirePermission();
         } catch (Exception e) {
             publishCallNotPermittedEvent();
@@ -210,10 +214,16 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
         }
     }
 
+    /**
+     * 处理调用异常
+     * @param duration 调用经过的持续时间
+     * @param durationUnit 持续时间单位
+     * @param throwable 必须记录的throwable
+     */
     @Override
     public void onError(long duration, TimeUnit durationUnit, Throwable throwable) {
-        // Handle the case if the completable future throws a CompletionException wrapping the original exception
-        // where original exception is the one to retry not the CompletionException.
+        //如果可完成的未来抛出CompletionException包装原始异常，则处理该情况
+        //其中原始异常是要重试的异常，而不是CompletionException。
         if (throwable instanceof CompletionException || throwable instanceof ExecutionException) {
             Throwable cause = throwable.getCause();
             handleThrowable(duration, durationUnit, cause);
@@ -222,38 +232,57 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
         }
     }
 
+    /**
+     * 处理调用成功
+     * @param duration 调用经过的持续时间
+     * @param durationUnit 持续时间单位
+     * @param throwable 必须记录的throwable
+     */
     private void handleThrowable(long duration, TimeUnit durationUnit, Throwable throwable) {
+        // 如果忽略异常
         if (circuitBreakerConfig.getIgnoreExceptionPredicate().test(throwable)) {
             LOG.debug("CircuitBreaker '{}' ignored an exception:", name, throwable);
+            // 释放前面获取的权限
             releasePermission();
+            // 发布忽略异常事件
             publishCircuitIgnoredErrorEvent(name, duration, durationUnit, throwable);
             return;
         }
+        // 如果记录异常
         if (circuitBreakerConfig.getRecordExceptionPredicate().test(throwable)) {
             LOG.debug("CircuitBreaker '{}' recorded an exception as failure:", name, throwable);
+            // 发布异常事件
             publishCircuitErrorEvent(name, duration, durationUnit, throwable);
+            // 记录异常指标 并检查是否需要过渡到打开状态
             stateReference.get().onError(duration, durationUnit, throwable);
         } else {
             LOG.debug("CircuitBreaker '{}' recorded an exception as success:", name, throwable);
+            // 发布成功事件
             publishSuccessEvent(duration, durationUnit);
+            // 记录调用指标 并检查是否需要过渡状态
             stateReference.get().onSuccess(duration, durationUnit);
         }
+        // 处理可能的过渡
         handlePossibleTransition(Either.right(throwable));
     }
 
     @Override
     public void onSuccess(long duration, TimeUnit durationUnit) {
         LOG.debug("CircuitBreaker '{}' succeeded:", name);
+        // 发布成功事件
         publishSuccessEvent(duration, durationUnit);
+        // 记录调用指标 并检查是否需要过渡状态
         stateReference.get().onSuccess(duration, durationUnit);
     }
 
     @Override
     public void onResult(long duration, TimeUnit durationUnit, @Nullable Object result) {
+        // 如果记录结果
         if (result != null && circuitBreakerConfig.getRecordResultPredicate().test(result)) {
             LOG.debug("CircuitBreaker '{}' recorded a result type '{}' as failure:", name, result.getClass());
             ResultRecordedAsFailureException failure = new ResultRecordedAsFailureException(name, result);
             publishCircuitErrorEvent(name, duration, durationUnit, failure);
+            // 记录调用指标 并检查是否需要过渡状态
             stateReference.get().onError(duration, durationUnit, failure);
         } else {
             onSuccess(duration, durationUnit);
@@ -319,12 +348,15 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
     @Override
     public void reset() {
+        // 重置状态 从当前状态过渡到关闭状态
         CircuitBreakerState previousState = stateReference
             .getAndUpdate(currentState -> new ClosedState());
         if (previousState.getState() != CLOSED) {
             publishStateTransitionEvent(
                 StateTransition.transitionBetween(getName(), previousState.getState(), CLOSED));
         }
+
+        // 发布重置事件
         publishResetEvent();
     }
 
@@ -617,7 +649,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
         @Override
         public void onError(long duration, TimeUnit durationUnit, Throwable throwable) {
-            // CircuitBreakerMetrics is thread-safe
+            // 首先记录调用 然后检查是否需要过渡到打开状态
             checkIfThresholdsExceeded(circuitBreakerMetrics.onError(duration, durationUnit));
         }
 
@@ -647,13 +679,16 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
         }
 
         /**
-         * Transitions to open state when thresholds have been exceeded.
+         * 超过阈值时转换为打开状态。
          *
          * @param result the Result
          */
         private void checkIfThresholdsExceeded(Result result) {
+            // 如果失败率或慢调用率超过阈值 并且当前状态是关闭状态
             if (Result.hasExceededThresholds(result) && isClosed.compareAndSet(true, false)) {
+                // 发布阈值超过事件
                 publishCircuitThresholdsExceededEvent(result, circuitBreakerMetrics);
+                // 过渡到打开状态
                 transitionToOpenState();
             }
         }
@@ -729,8 +764,9 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
          */
         @Override
         public boolean tryAcquirePermission() {
-            // Thread-safe
+            // Check if the wait duration has elapsed
             if (clock.instant().isAfter(retryAfterWaitDuration)) {
+                // Transition to HALF_OPEN state
                 toHalfOpenState();
                 // Check if the call is allowed to run in HALF_OPEN state after state transition
                 // super.tryAcquirePermission() doesn't work right that's why the code is copied
@@ -741,6 +777,8 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
                 }
                 return callPermitted;
             }
+
+            // Wait duration has not elapsed
             circuitBreakerMetrics.onCallNotPermitted();
             return false;
         }
@@ -1099,10 +1137,13 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
          */
         @Override
         public boolean tryAcquirePermission() {
+            // 如果允许的调用次数大于0 返回true
             if (permittedNumberOfCalls.getAndUpdate(current -> current == 0 ? current : --current)
                 > 0) {
                 return true;
             }
+
+            // 记录不可调用事件
             circuitBreakerMetrics.onCallNotPermitted();
             return false;
         }
@@ -1134,6 +1175,7 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
 
         @Override
         public void releasePermission() {
+            // 允许调用的次数加1
             permittedNumberOfCalls.incrementAndGet();
         }
 
@@ -1166,9 +1208,12 @@ public final class CircuitBreakerStateMachine implements CircuitBreaker {
          * @param result the result
          */
         private void checkIfThresholdsExceeded(Result result) {
+            // 如果失败率或慢调用率超过阈值 并且当前状态是半开状态 转为打开状态
             if (Result.hasExceededThresholds(result) && isHalfOpen.compareAndSet(true, false)) {
                 transitionToOpenState();
             }
+
+            // 如果失败率低于阀值 转为关闭状态
             if (result == BELOW_THRESHOLDS && isHalfOpen.compareAndSet(true, false)) {
                 transitionToClosedState();
             }

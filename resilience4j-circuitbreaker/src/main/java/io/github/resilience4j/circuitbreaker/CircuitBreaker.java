@@ -65,16 +65,25 @@ public interface CircuitBreaker {
      */
     static <T> CheckedSupplier<T> decorateCheckedSupplier(CircuitBreaker circuitBreaker, CheckedSupplier<T> supplier) {
         return () -> {
+            // Acquire permission before the call
             circuitBreaker.acquirePermission();
+
+            // Record the call
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
+                // Execute the decorated supplier
                 T result = supplier.get();
+
+                // Record a successful call
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // Record the result
                 circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), result);
+
                 return result;
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // Record a failed call
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -94,13 +103,13 @@ public interface CircuitBreaker {
         Supplier<CompletionStage<T>> supplier
     ) {
         return () -> {
-
             final CompletableFuture<T> promise = new CompletableFuture<>();
 
+            // Acquire permission before the call
             if (!circuitBreaker.tryAcquirePermission()) {
+                // 没有权限的调用
                 promise.completeExceptionally(
                     CallNotPermittedException.createCallNotPermittedException(circuitBreaker));
-
             } else {
                 final long start = circuitBreaker.getCurrentTimestamp();
                 try {
@@ -108,22 +117,29 @@ public interface CircuitBreaker {
                         long duration = circuitBreaker.getCurrentTimestamp() - start;
                         if (throwable != null) {
                             if (throwable instanceof Exception) {
+                                // 调用抛出异常 让断路器感知
                                 circuitBreaker
                                     .onError(duration, circuitBreaker.getTimestampUnit(), throwable);
                             }
+                            // 失败的调用
                             promise.completeExceptionally(throwable);
                         } else {
+                            // 成功的调用 让断路器感知
                             circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), result);
+                            // 返回结果
                             promise.complete(result);
                         }
                     });
                 } catch (Exception exception) {
                     long duration = circuitBreaker.getCurrentTimestamp() - start;
+                    // 失败的调用 让断路器感知
                     circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
+                    // 失败的调用
                     promise.completeExceptionally(exception);
                 }
             }
 
+            // 返回结果
             return promise;
         };
     }
@@ -137,15 +153,18 @@ public interface CircuitBreaker {
      */
     static CheckedRunnable decorateCheckedRunnable(CircuitBreaker circuitBreaker, CheckedRunnable runnable) {
         return () -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 runnable.run();
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onSuccess(duration, circuitBreaker.getTimestampUnit());
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -162,11 +181,13 @@ public interface CircuitBreaker {
      */
     static <T> Callable<T> decorateCallable(CircuitBreaker circuitBreaker, Callable<T> callable) {
         return () -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 T result = callable.call();
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), result);
                 return result;
             } catch (Exception exception) {
@@ -188,16 +209,19 @@ public interface CircuitBreaker {
      */
     static <T> Supplier<T> decorateSupplier(CircuitBreaker circuitBreaker, Supplier<T> supplier) {
         return () -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 T result = supplier.get();
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), result);
                 return result;
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -214,15 +238,18 @@ public interface CircuitBreaker {
      */
     static <T> Consumer<T> decorateConsumer(CircuitBreaker circuitBreaker, Consumer<T> consumer) {
         return (t) -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 consumer.accept(t);
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onSuccess(duration, circuitBreaker.getTimestampUnit());
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -239,15 +266,18 @@ public interface CircuitBreaker {
      */
     static <T> CheckedConsumer<T> decorateCheckedConsumer(CircuitBreaker circuitBreaker, CheckedConsumer<T> consumer) {
         return (t) -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 consumer.accept(t);
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onSuccess(duration, circuitBreaker.getTimestampUnit());
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -263,15 +293,18 @@ public interface CircuitBreaker {
      */
     static Runnable decorateRunnable(CircuitBreaker circuitBreaker, Runnable runnable) {
         return () -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 runnable.run();
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onSuccess(duration, circuitBreaker.getTimestampUnit());
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -290,16 +323,19 @@ public interface CircuitBreaker {
     static <T, R> Function<T, R> decorateFunction(CircuitBreaker circuitBreaker,
         Function<T, R> function) {
         return (T t) -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 R returnValue = function.apply(t);
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), returnValue);
                 return returnValue;
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -317,16 +353,19 @@ public interface CircuitBreaker {
      */
     static <T, R> CheckedFunction<T, R> decorateCheckedFunction(CircuitBreaker circuitBreaker, CheckedFunction<T, R> function) {
         return (T t) -> {
+            // 获取权限
             circuitBreaker.acquirePermission();
             final long start = circuitBreaker.getCurrentTimestamp();
             try {
                 R result = function.apply(t);
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用成功 让断路器感知
                 circuitBreaker.onResult(duration, circuitBreaker.getTimestampUnit(), result);
                 return result;
             } catch (Exception exception) {
                 // Do not handle java.lang.Error
                 long duration = circuitBreaker.getCurrentTimestamp() - start;
+                // 调用失败 让断路器感知
                 circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), exception);
                 throw exception;
             }
@@ -412,6 +451,7 @@ public interface CircuitBreaker {
     static <T> Supplier<Future<T>> decorateFuture(CircuitBreaker circuitBreaker,
         Supplier<Future<T>> supplier) {
         return () -> {
+            // 获取权限
             if (!circuitBreaker.tryAcquirePermission()) {
                 CompletableFuture<T> promise = new CompletableFuture<>();
                 promise.completeExceptionally(
@@ -423,6 +463,7 @@ public interface CircuitBreaker {
                     return new CircuitBreakerFuture<>(circuitBreaker, supplier.get(), start);
                 } catch (Exception e) {
                     long duration = circuitBreaker.getCurrentTimestamp() - start;
+                    // 调用失败 让断路器感知
                     circuitBreaker.onError(duration, circuitBreaker.getTimestampUnit(), e);
                     throw e;
                 }
@@ -431,41 +472,41 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Acquires a permission to execute a call, only if one is available at the time of invocation.
-     * If a call is not permitted, the number of not permitted calls is increased.
-     * <p>
-     * Returns false when the state is OPEN or FORCED_OPEN. Returns true when the state is CLOSED or
-     * DISABLED. Returns true when the state is HALF_OPEN and further test calls are allowed.
-     * Returns false when the state is HALF_OPEN and the number of test calls has been reached. If
-     * the state is HALF_OPEN, the number of allowed test calls is decreased. Important: Make sure
-     * to call onSuccess or onError after the call is finished. If the call is cancelled before it
-     * is invoked, you have to release the permission again.
+     * 仅当调用时有可用的权限时，才获取执行调用的权限。
+     *如果不允许呼叫，则增加不允许呼叫的数量。
+     </p>
+     *当状态为OPEN或FORCED_OPEN时，返回false。当状态为CLOSED或
+     *禁用。当状态为HALF_OPEN并且允许进一步的测试调用时，返回true。
+     *当状态为HALF_OPEN并且已达到测试调用数时，返回false。如果
+     *状态为HALF_OPEN，则允许的测试调用数会减少。重要提示：确保
+     *以在调用完成后调用onSuccess或onError。如果通话在此之前被取消
+     *则必须再次释放该权限。
      *
      * @return {@code true} if a permission was acquired and {@code false} otherwise
      */
     boolean tryAcquirePermission();
 
     /**
-     * Releases a permission.
-     * <p>
-     * Should only be used when a permission was acquired but not used. Otherwise use {@link
-     * CircuitBreaker#onSuccess(long, TimeUnit)} or
-     * {@link CircuitBreaker#onError(long, TimeUnit, Throwable)} to signal a completed or failed call.
-     * <p>
-     * If the state is HALF_OPEN, the number of allowed test calls is increased by one.
+     * 释放权限。
+     * </p>
+     * 应仅在获得许可但未使用时使用。否则使用｛@link
+     * CircuitBreaker#onSuccess（long，TimeUnit）｝或
+     * ｛@link CircuitBreaker#onError（long，TimeUnit，Throwable）｝以发出呼叫完成或失败的信号。
+     * </p>
+     * 如果状态为HALF_OPEN，则允许的测试调用数将增加一。
      */
     void releasePermission();
 
     /**
-     * Try to obtain a permission to execute a call. If a call is not permitted, the number of not
-     * permitted calls is increased.
-     * <p>
-     * Throws a CallNotPermittedException when the state is OPEN or FORCED_OPEN. Returns when the
-     * state is CLOSED or DISABLED. Returns when the state is HALF_OPEN and further test calls are
-     * allowed. Throws a CallNotPermittedException when the state is HALF_OPEN and the number of
-     * test calls has been reached. If the state is HALF_OPEN, the number of allowed test calls is
-     * decreased. Important: Make sure to call onSuccess or onError after the call is finished. If
-     * the call is cancelled before it is invoked, you have to release the permission again.
+     *尝试获取执行调用的权限。如果不允许呼叫，则不允许的号码
+     *允许的呼叫增加。
+     </p>
+     *当状态为OPEN或FORCED_OPEN时引发CallNotPermittedException。当
+     *状态为CLOSED（关闭）或DISABLED（禁用）。当状态为HALF_OPEN并且进一步的测试调用为时返回
+     *允许。当状态为HALF_OPEN且
+     *已到达测试调用。如果状态为HALF_OPEN，则允许的测试调用数为
+     *减少。重要提示：请确保在调用完成后调用onSuccess或onError。如果
+     *调用之前调用被取消，您必须再次释放权限。
      *
      * @throws CallNotPermittedException when CircuitBreaker is OPEN or HALF_OPEN and no further
      *                                   test calls are permitted.
@@ -473,47 +514,47 @@ public interface CircuitBreaker {
     void acquirePermission();
 
     /**
-     * Records a failed call. This method must be invoked when a call failed.
+     * 记录一个失败的呼叫。当调用失败时，必须调用此方法。
      *
-     * @param duration     The elapsed time duration of the call
-     * @param durationUnit The duration unit
-     * @param throwable    The throwable which must be recorded
+     * @param duration 调用经过的持续时间
+     * @param durationUnit 持续时间单位
+     * @param throwable 必须记录的throwable
      */
     void onError(long duration, TimeUnit durationUnit, Throwable throwable);
 
     /**
-     * Records a successful call. This method must be invoked when a call was
-     * successful.
+     * 记录一个成功的呼叫。当调用
+     * 成功的
      *
-     * @param duration     The elapsed time duration of the call
-     * @param durationUnit The duration unit
+     * @param duration 调用经过的持续时间
+     * @param durationUnit 持续时间单位
      */
     void onSuccess(long duration, TimeUnit durationUnit);
 
     /**
-     * This method must be invoked when a call returned a result
-     * and the result predicate should decide if the call was successful or not.
+     * 当调用返回结果时，必须调用此方法
+     * 结果谓词应该决定调用是否成功。
      *
-     * @param duration     The elapsed time duration of the call
-     * @param durationUnit The duration unit
-     * @param result       The result of the protected function
+     * @param duration 调用经过的持续时间
+     * @param durationUnit 持续时间单位
+     * @param result 受保护函数的结果
      */
     void onResult(long duration, TimeUnit durationUnit, Object result);
 
     /**
-     * Returns the circuit breaker to its original closed state, losing statistics.
-     * <p>
-     * Should only be used, when you want to fully reset the circuit breaker without
-     * creating a new one.
+     *将断路器恢复到其原始闭合状态，丢失统计信息。
+     </p>
+     *仅当您希望完全重置断路器时才应使用
+     *创建一个新的。
      */
     void reset();
 
     /**
-     * Transitions the state machine to CLOSED state. This call is idempotent and will not have
-     * any effect if the state machine is already in CLOSED state.
-     * <p>
-     * Should only be used, when you want to force a state transition. State transition are normally
-     * done internally.
+     * 将状态机转换为关闭状态。这个调用是幂等的，不会有
+     * 如果状态机已经处于关闭状态，则任何效果。
+     </p>
+     *仅当您希望强制进行状态转换时才应使用。状态转换正常
+     *内部完成。
      */
     void transitionToClosedState();
 
@@ -604,44 +645,44 @@ public interface CircuitBreaker {
     CircuitBreakerConfig getCircuitBreakerConfig();
 
     /**
-     * Returns the Metrics of this CircuitBreaker.
+     * 返回此CircuitBreaker的度量。
      *
      * @return the Metrics of this CircuitBreaker
      */
     Metrics getMetrics();
 
     /**
-     * Returns an unmodifiable map with tags assigned to this CircuitBreaker.
+     * 返回一个不可修改的映射，其中标记已分配给该CircuitBreaker。
      *
      * @return the tags assigned to this CircuitBreaker in an unmodifiable map
      */
     Map<String, String> getTags();
 
     /**
-     * Returns an EventPublisher which can be used to register event consumers.
+     * 返回一个EventPublisher，该EventPublisher可用于注册事件使用者。
      *
      * @return an EventPublisher
      */
     EventPublisher getEventPublisher();
 
     /**
-     * Returns the current time with respect to the CircuitBreaker currentTimeFunction.
-     * Returns System.nanoTime() by default.
+     * 返回与CircuitBreaker currentTimeFunction相关的当前时间。
+     * 默认情况下返回System.nanoTime（）。
      *
      * @return current timestamp
      */
     long getCurrentTimestamp();
 
     /**
-     * Returns the timeUnit of current timestamp.
-     * Default is TimeUnit.NANOSECONDS.
+     * 返回当前时间戳的时间单位。
+     * 默认值为TimeUnit。纳秒。
      *
      * @return the timeUnit of current timestamp
      */
     TimeUnit getTimestampUnit();
 
     /**
-     * Decorates and executes the decorated Supplier.
+     * 装饰并执行装饰供应商。
      *
      * @param supplier the original Supplier
      * @param <T>      the type of results supplied by this supplier
@@ -652,7 +693,7 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Returns a supplier which is decorated by a CircuitBreaker.
+     * 返回由CircuitBreaker装饰的供应商。
      *
      * @param supplier the original supplier
      * @param <T>      the type of results supplied by this supplier
@@ -663,7 +704,7 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Decorates and executes the decorated Callable.
+     * 装饰并执行已装饰的Callable。
      *
      * @param callable the original Callable
      * @param <T>      the result type of callable
@@ -675,7 +716,7 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Returns a callable which is decorated by a CircuitBreaker.
+     * 返回一个由CircuitBreaker装饰的可调用对象。
      *
      * @param callable the original Callable
      * @param <T>      the result type of callable
@@ -686,7 +727,7 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Decorates and executes the decorated Runnable.
+     * 装饰并执行已装饰的Runnable。
      *
      * @param runnable the original Runnable
      */
@@ -695,7 +736,7 @@ public interface CircuitBreaker {
     }
 
     /**
-     * Returns a runnable which is decorated by a CircuitBreaker.
+     * 返回一个由CircuitBreaker装饰的可运行文件。
      *
      * @param runnable the original runnable
      * @return a runnable which is decorated by a CircuitBreaker.
@@ -805,34 +846,34 @@ public interface CircuitBreaker {
     }
 
     /**
-     * States of the CircuitBreaker state machine.
+     * 断路器状态机的状态。
      */
     enum State {
         /**
-         * A DISABLED breaker is not operating (no state transition, no events) and allowing all
-         * requests through.
+         *DISABLED 断路器未运行（无状态转换，无事件），并且允许所有
+         *请求通过。
          */
         DISABLED(3, false),
         /**
-         * A METRICS_ONLY breaker is collecting metrics, publishing events and allowing all requests
-         * through but is not transitioning to other states.
+         * METRICS_ONLY 断路器正在收集度量、发布事件并允许所有请求
+         * 通过但未过渡到其他状态。
          */
         METRICS_ONLY(5, true),
         /**
-         * A CLOSED breaker is operating normally and allowing requests through.
+         * CLOSED 断路器运行正常，允许请求通过。
          */
         CLOSED(0, true),
         /**
-         * An OPEN breaker has tripped and will not allow requests through.
+         * OPEN断路器跳闸，不允许请求通过。
          */
         OPEN(1, true),
         /**
-         * A FORCED_OPEN breaker is not operating (no state transition, no events) and not allowing
-         * any requests through.
+         * FORCED_OPEN断路器未运行（无状态转换，无事件）且不允许
+         * 任何请求通过。
          */
         FORCED_OPEN(4, false),
         /**
-         * A HALF_OPEN breaker has completed its wait interval and will allow requests
+         * HALF_OPEN断路器已完成其等待间隔，将允许请求
          */
         HALF_OPEN(2, true);
 
@@ -968,60 +1009,58 @@ public interface CircuitBreaker {
     interface Metrics {
 
         /**
-         * Returns the current failure rate in percentage. If the number of measured calls is below
-         * the minimum number of measured calls, it returns -1.
+         *以百分比形式返回当前故障率。如果测量到的呼叫数低于
+         *测量到的最小调用数，返回-1。
          *
          * @return the failure rate in percentage
          */
         float getFailureRate();
 
         /**
-         * Returns the current percentage of calls which were slower than a certain threshold. If
-         * the number of measured calls is below the minimum number of measured calls, it returns
-         * -1.
+         *返回低于某个阈值的当前调用百分比。如果
+         *测量到的调用数低于测量到的最小调用数，则返回-1.
          *
          * @return the failure rate in percentage
          */
         float getSlowCallRate();
 
         /**
-         * Returns the current total number of calls which were slower than a certain threshold.
+         * 返回当前低于某个阈值的调用总数。
          *
          * @return the current total number of calls which were slower than a certain threshold
          */
         int getNumberOfSlowCalls();
 
         /**
-         * Returns the current number of successful calls which were slower than a certain
-         * threshold.
+         * 返回当前慢于特定阈值的成功调用数。
          *
-         * @return the current number of successful calls which were slower than a certain threshold
+         * @return 当前速度慢于某个临界值的成功呼叫次数
          */
         int getNumberOfSlowSuccessfulCalls();
 
         /**
-         * Returns the current number of failed calls which were slower than a certain threshold.
+         * 返回当前慢于特定阈值的失败调用数。
          *
          * @return the current number of failed calls which were slower than a certain threshold
          */
         int getNumberOfSlowFailedCalls();
 
         /**
-         * Returns the current total number of buffered calls in the ring buffer.
+         * 返回环形缓冲区中当前缓冲呼叫的总数。
          *
          * @return he current total number of buffered calls in the ring buffer
          */
         int getNumberOfBufferedCalls();
 
         /**
-         * Returns the current number of failed buffered calls in the ring buffer.
+         * 返回环形缓冲区中当前失败的缓冲调用次数。
          *
          * @return the current number of failed buffered calls in the ring buffer
          */
         int getNumberOfFailedCalls();
 
         /**
-         * Returns the current number of not permitted calls, when the state is OPEN.
+         * 当状态为OPEN时，返回当前不允许的调用数。
          * <p>
          * The number of denied calls is always 0, when the CircuitBreaker state is CLOSED or
          * HALF_OPEN. The number of denied calls is only increased when the CircuitBreaker state is
@@ -1032,7 +1071,7 @@ public interface CircuitBreaker {
         long getNumberOfNotPermittedCalls();
 
         /**
-         * Returns the current number of successful buffered calls in the ring buffer.
+         * 返回环形缓冲区中当前成功缓冲的调用数。
          *
          * @return the current number of successful buffered calls in the ring buffer
          */

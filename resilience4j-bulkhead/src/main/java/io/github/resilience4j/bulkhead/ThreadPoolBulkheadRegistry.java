@@ -33,8 +33,8 @@ import java.util.function.Supplier;
 import static java.util.Collections.emptyMap;
 
 /**
- * The {@link ThreadPoolBulkheadRegistry} is a factory to create ThreadPoolBulkhead instances which
- * stores all bulkhead instances in a registry.
+ * ｛@link ThreadPoolBulkheadRegistry｝是一个工厂，用于创建ThreadPoolBulkhead实例
+ * 将所有舱壁实例存储在注册表中。
  */
 public interface ThreadPoolBulkheadRegistry extends
     Registry<ThreadPoolBulkhead, ThreadPoolBulkheadConfig>, AutoCloseable {

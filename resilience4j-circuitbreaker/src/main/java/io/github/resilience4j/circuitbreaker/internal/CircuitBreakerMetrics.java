@@ -35,10 +35,15 @@ import static io.github.resilience4j.core.metrics.Metrics.Outcome;
 class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
 
     private final Metrics metrics;
+    // 故障率阀值
     private final float failureRateThreshold;
+    // 慢调用阀值
     private final float slowCallRateThreshold;
+    // 慢调用持续时间阀值（以纳秒为单位）
     private final long slowCallDurationThresholdInNanos;
+    // 记录不允许的调用次数
     private final LongAdder numberOfNotPermittedCalls;
+    // 最小调用次数
     private int minimumNumberOfCalls;
 
     private CircuitBreakerMetrics(int slidingWindowSize,
@@ -124,12 +129,13 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
         } else {
             snapshot = metrics.record(duration, durationUnit, Outcome.ERROR);
         }
+
         return checkIfThresholdsExceeded(snapshot);
     }
 
     /**
-     * Checks if the failure rate is above the threshold or if the slow calls percentage is above
-     * the threshold.
+     * 检查故障率是否高于阈值或慢速呼叫百分比是否高于阈值
+     * 阈值。
      *
      * @param snapshot a metrics snapshot
      * @return false, if the thresholds haven't been exceeded.
@@ -138,36 +144,50 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
         float failureRateInPercentage = getFailureRate(snapshot);
         float slowCallsInPercentage = getSlowCallRate(snapshot);
 
+        // 低于最低调用次数阈值
         if (failureRateInPercentage == -1 || slowCallsInPercentage == -1) {
             return Result.BELOW_MINIMUM_CALLS_THRESHOLD;
         }
+
+        // 故障率和慢速调用率都超过阈值
         if (failureRateInPercentage >= failureRateThreshold
             && slowCallsInPercentage >= slowCallRateThreshold) {
             return Result.ABOVE_THRESHOLDS;
         }
+
+        // 故障率超过阈值
         if (failureRateInPercentage >= failureRateThreshold) {
             return Result.FAILURE_RATE_ABOVE_THRESHOLDS;
         }
 
+        // 慢速调用率超过阈值
         if (slowCallsInPercentage >= slowCallRateThreshold) {
             return Result.SLOW_CALL_RATE_ABOVE_THRESHOLDS;
         }
+
+        // 故障率低于阈值
         return Result.BELOW_THRESHOLDS;
     }
 
     private float getSlowCallRate(Snapshot snapshot) {
+        // 调用次数小于最小调用次数阈值 返回-1
         int bufferedCalls = snapshot.getTotalNumberOfCalls();
         if (bufferedCalls == 0 || bufferedCalls < minimumNumberOfCalls) {
             return -1.0f;
         }
+
+        // 返回慢速调用率
         return snapshot.getSlowCallRate();
     }
 
     private float getFailureRate(Snapshot snapshot) {
+        // 调用次数小于最小调用次数阈值 返回-1
         int bufferedCalls = snapshot.getTotalNumberOfCalls();
         if (bufferedCalls == 0 || bufferedCalls < minimumNumberOfCalls) {
             return -1.0f;
         }
+
+        // 返回失败率
         return snapshot.getFailureRate();
     }
 
@@ -238,15 +258,18 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
         ABOVE_THRESHOLDS,
         BELOW_MINIMUM_CALLS_THRESHOLD;
 
+        // 是否超过阈值
         public static boolean hasExceededThresholds(Result result) {
             return hasFailureRateExceededThreshold(result) ||
                 hasSlowCallRateExceededThreshold(result);
         }
 
+        // 故障率是否超过阈值
         public static boolean hasFailureRateExceededThreshold(Result result) {
             return result == ABOVE_THRESHOLDS || result == FAILURE_RATE_ABOVE_THRESHOLDS;
         }
 
+        // 慢速调用率是否超过阈值
         public static boolean hasSlowCallRateExceededThreshold(Result result) {
             return result == ABOVE_THRESHOLDS || result == SLOW_CALL_RATE_ABOVE_THRESHOLDS;
         }
