@@ -125,7 +125,7 @@ class CircuitBreakerMetrics implements CircuitBreaker.Metrics {
     }
 
     /**
-     * Records a failed call and checks if the thresholds are exceeded.
+     * 记录一个失败的调用，并检查是否超过了阈值。
      *
      * @return the result of the check
      */
