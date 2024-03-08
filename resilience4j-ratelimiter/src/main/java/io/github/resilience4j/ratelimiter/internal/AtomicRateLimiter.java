@@ -116,10 +116,17 @@ public class AtomicRateLimiter implements RateLimiter {
      */
     @Override
     public boolean acquirePermission(final int permits) {
+        // 超时持续时间，表示请求等待执行的最长时间，单位为毫秒，0 表示无限期等待
         long timeoutInNanos = state.get().config.getTimeoutDuration().toNanos();
+
+        // 更新状态 这是最核心的方法 计算周期内剩余的权限以及需要等待的时间
         State modifiedState = updateStateWithBackOff(permits, timeoutInNanos);
+
+        // 等待指定时间来获取权限
         boolean result = waitForPermissionIfNecessary(timeoutInNanos, modifiedState.nanosToWait);
+
         publishRateLimiterAcquisitionEvent(result, permits);
+
         return result;
     }
 
@@ -161,6 +168,10 @@ public class AtomicRateLimiter implements RateLimiter {
     }
 
     /**
+     * 该方法是用于原子更新当前状态（State）的，更新的结果是通过应用AtomicRateLimiter类中的calculateNextState方法得到的。
+     * 与普通的AtomicReference类的updateAndGet方法不同的是，该方法具有常数退避（constant back off）的特性。
+     * 这意味着，在尝试一次compareAndSet操作后，该方法会在再次尝试之前等待一段时间。
+     *
      * Atomically updates the current {@link State} with the results of applying the {@link
      * AtomicRateLimiter#calculateNextState}, returning the updated {@link State}. It differs from
      * {@link AtomicReference#updateAndGet(UnaryOperator)} by constant back off. It means that after
@@ -175,10 +186,16 @@ public class AtomicRateLimiter implements RateLimiter {
     private State updateStateWithBackOff(final int permits, final long timeoutInNanos) {
         AtomicRateLimiter.State prev;
         AtomicRateLimiter.State next;
+
+        // cas更新当前状态
         do {
+            // 当前状态
             prev = state.get();
+
+            // 计算下一个状态
             next = calculateNextState(permits, timeoutInNanos, prev);
         } while (!compareAndSet(prev, next));
+
         return next;
     }
 
@@ -205,63 +222,93 @@ public class AtomicRateLimiter implements RateLimiter {
     }
 
     /**
-     * A side-effect-free function that can calculate next {@link State} from current. It determines
-     * time duration that you should wait for the given number of permits and reserves it for you,
-     * if you'll be able to wait long enough.
+     * 一个无副作用的函数，可以从当前计算下一个｛@link State｝。它决定
+     * 您应该等待给定数量的许可证并为您保留的时间，
+     * 如果你能等足够长的时间。
      *
-     * @param permits        number of permits
-     * @param timeoutInNanos max time that caller can wait for permission in nanoseconds
-     * @param activeState    current state of {@link AtomicRateLimiter}
+     * @param permits        许可证数量
+     * @param timeoutInNanos 调用方可以等待权限的最长时间（以纳秒为单位）
+     * @param activeState    ｛@link AtomicRateLimiter｝ 的当前状态
      * @return next {@link State}
      */
     private State calculateNextState(final int permits, final long timeoutInNanos,
                                      final State activeState) {
+        // 配置的限流周期
         long cyclePeriodInNanos = activeState.config.getLimitRefreshPeriod().toNanos();
+        // 每个时间周期的限流阈值，表示每个时间周期内允许的最大请求数
         int permissionsPerCycle = activeState.config.getLimitForPeriod();
 
+        // 当前时间
         long currentNanos = currentNanoTime();
+        // 当前所处周期
         long currentCycle = currentNanos / cyclePeriodInNanos;
 
+        // 激活的周期
         long nextCycle = activeState.activeCycle;
+        // 激活的周期所剩余的权限数
         int nextPermissions = activeState.activePermissions;
+
+
+        // 如果当前所处的周期和上次激活的限流周期不处在一个周期中 重新计算 注意上个状态中权限数可能是负的 欠的债在这里要还
         if (nextCycle != currentCycle) {
+            // 当前与激活周期的差额
             long elapsedCycles = currentCycle - nextCycle;
+
+            // 区间内累计权限
             long accumulatedPermissions = elapsedCycles * permissionsPerCycle;
+
+            // 赋值下一个周期
             nextCycle = currentCycle;
+
+            // 下一个周期的权限数  注意上个状态中权限数可能是负的 欠的债在这里要还 也就是min(x,y)的作用
             nextPermissions = (int) min(nextPermissions + accumulatedPermissions,
                 permissionsPerCycle);
         }
+
+        // 计算等待所需权限许可证累积的时间
         long nextNanosToWait = nanosToWaitForPermission(
             permits, cyclePeriodInNanos, permissionsPerCycle, nextPermissions, currentNanos,
             currentCycle
         );
+
         State nextState = reservePermissions(activeState.config, permits, timeoutInNanos, nextCycle,
             nextPermissions, nextNanosToWait);
+
         return nextState;
     }
 
     /**
-     * Calculates time to wait for the required permits of permissions to get accumulated
+     * 计算等待所需权限许可证累积的时间
      *
-     * @param permits              permits of required permissions
-     * @param cyclePeriodInNanos   current configuration values
-     * @param permissionsPerCycle  current configuration values
-     * @param availablePermissions currently available permissions, can be negative if some
-     *                             permissions have been reserved
-     * @param currentNanos         current time in nanoseconds
-     * @param currentCycle         current {@link AtomicRateLimiter} cycle    @return nanoseconds to
+     * @param permits              所需权限的许可证
+     * @param cyclePeriodInNanos   限流周期
+     * @param permissionsPerCycle  每个周期的最大阀值
+     * @param availablePermissions 当前可用权限，如果有已保留权限
+     * @param currentNanos         当前时间（纳秒）
+     * @param currentCycle         当前｛@link AtomicRateLimiter｝周期    @return nanoseconds to
      *                             wait for the next permission
      */
     private long nanosToWaitForPermission(final int permits, final long cyclePeriodInNanos,
                                           final int permissionsPerCycle,
                                           final int availablePermissions, final long currentNanos, final long currentCycle) {
+        // 当前周期可用权限大于需要的权限 返回0 表示不需要等待
         if (availablePermissions >= permits) {
             return 0L;
         }
+
+        // 走到下面说明本周期内的权限肯定是不够了 需要累计等待几个周期获取足够的权限
+
+        // 下一个循环时间（纳米）
         long nextCycleTimeInNanos = (currentCycle + 1) * cyclePeriodInNanos;
+        // 下一个周期和当前周期时间差
         long nanosToNextCycle = nextCycleTimeInNanos - currentNanos;
+        // 当前周期到下一个周期可用的权限
         int permissionsAtTheStartOfNextCycle = availablePermissions + permissionsPerCycle;
+
+        // （  permits - availablePermissions  + 1 ） / permissionsPerCycle 即 获取需要的权限需要几个周期
         int fullCyclesToWait = divCeil(-(permissionsAtTheStartOfNextCycle - permits), permissionsPerCycle);
+
+        // 等待的时间
         return (fullCyclesToWait * cyclePeriodInNanos) + nanosToNextCycle;
     }
 
@@ -276,46 +323,52 @@ public class AtomicRateLimiter implements RateLimiter {
     }
 
     /**
-     * Determines whether caller can acquire permission before timeout or not and then creates
-     * corresponding {@link State}. Reserves permissions only if caller can successfully wait for
-     * permission.
+     * 确定调用方是否可以在超时前获取权限，然后创建
+     * 对应的{@link State}。只有当调用方可以成功等待时才保留权限准许
      *
      * @param config
-     * @param permits        permits of permissions
-     * @param timeoutInNanos max time that caller can wait for permission in nanoseconds
-     * @param cycle          cycle for new {@link State}
-     * @param permissions    permissions for new {@link State}
-     * @param nanosToWait    nanoseconds to wait for the next permission
+     * @param permits        要获取的许可证
+     * @param timeoutInNanos 调用方可以等待权限的最长时间（以纳秒为单位）
+     * @param cycle          新｛@link State｝ 的周期
+     * @param permissions    新｛@link State｝ 的权限
+     * @param nanosToWait    等待下一个权限的时间
      * @return new {@link State} with possibly reserved permissions and time to wait
      */
     private State reservePermissions(final RateLimiterConfig config, final int permits,
                                      final long timeoutInNanos,
                                      final long cycle, final int permissions, final long nanosToWait) {
+        // 调用方可以等待怎么长时间
         boolean canAcquireInTime = timeoutInNanos >= nanosToWait;
+        // 当前周期还剩下的权限
         int permissionsWithReservation = permissions;
         if (canAcquireInTime) {
+            // 下一个状态还剩下的权限
             permissionsWithReservation -= permits;
         }
+
+        // 创建新的状态
         return new State(config, cycle, permissionsWithReservation, nanosToWait);
     }
 
     /**
-     * If nanosToWait is bigger than 0 it tries to park {@link Thread} for nanosToWait but not
-     * longer then timeoutInNanos.
+     * 如果nanosToWait大于0，它会尝试为nanosToWait停放{@link Thread}，但不会比timeoutInNanos的时间更长。
      *
-     * @param timeoutInNanos max time that caller can wait
-     * @param nanosToWait    nanoseconds caller need to wait
+     * @param timeoutInNanos 调用发可以等待的最长时间
+     * @param nanosToWait    调用方需要等待纳秒
      * @return true if caller was able to wait for nanosToWait without {@link Thread#interrupt} and
      * not exceed timeout
      */
     private boolean waitForPermissionIfNecessary(final long timeoutInNanos,
                                                  final long nanosToWait) {
+        // 可以立即获取
         boolean canAcquireImmediately = nanosToWait <= 0;
+        // 可以获取
         boolean canAcquireInTime = timeoutInNanos >= nanosToWait;
 
         if (canAcquireImmediately) {
             return true;
         }
+
         if (canAcquireInTime) {
             return waitForPermission(nanosToWait);
         }
@@ -333,7 +386,9 @@ public class AtomicRateLimiter implements RateLimiter {
      * @return true if caller was not {@link Thread#interrupted} while waiting
      */
     private boolean waitForPermission(final long nanosToWait) {
+        // 等待线程数加1
         waitingThreads.incrementAndGet();
+        // 要等待到的时间
         long deadline = currentNanoTime() + nanosToWait;
         boolean wasInterrupted = false;
         while (currentNanoTime() < deadline && !wasInterrupted) {
@@ -341,10 +396,13 @@ public class AtomicRateLimiter implements RateLimiter {
             parkNanos(sleepBlockDuration);
             wasInterrupted = Thread.interrupted();
         }
+
+        // 等待线程数减1
         waitingThreads.decrementAndGet();
         if (wasInterrupted) {
             currentThread().interrupt();
         }
+
         return !wasInterrupted;
     }
 
@@ -432,8 +490,11 @@ public class AtomicRateLimiter implements RateLimiter {
 
         private final RateLimiterConfig config;
 
+        // 当前周期
         private final long activeCycle;
+        // 当前周期剩余的权限 这tm可能是负的
         private final int activePermissions;
+        // 等待的时间
         private final long nanosToWait;
 
         private State(RateLimiterConfig config,

@@ -37,9 +37,16 @@ public class RateLimiterConfig implements Serializable {
     private static final Duration ACCEPTABLE_REFRESH_PERIOD = Duration.ofNanos(1L);
     private static final boolean DEFAULT_WRITABLE_STACK_TRACE_ENABLED = true;
 
+
+    // 超时持续时间，表示请求等待执行的最长时间，单位为毫秒，0 表示无限期等待
     private final Duration timeoutDuration;
+
+    // 限流周期
     private final Duration limitRefreshPeriod;
+
+    // 每个时间周期的限流阈值，表示每个时间周期内允许的最大请求数
     private final int limitForPeriod;
+
     private final transient Predicate<Either<? extends Throwable, ?>> drainPermissionsOnResult;
     private final boolean writableStackTraceEnabled;
 

@@ -214,10 +214,15 @@ public interface RateLimiter {
     static <T> CheckedSupplier<T> decorateCheckedSupplier(RateLimiter rateLimiter, int permits,
                                                           CheckedSupplier<T> supplier) {
         return () -> {
+            // 等待权限
             waitForPermission(rateLimiter, permits);
+
             try {
+                // 执行逻辑
                 T result = supplier.get();
+
                 rateLimiter.onResult(result);
+
                 return result;
             } catch (Exception exception) {
                 rateLimiter.onError(exception);
@@ -494,19 +499,22 @@ public interface RateLimiter {
     }
 
     /**
-     * Will wait for required number of permits within default timeout duration.
+     * 将在默认超时持续时间内 等待 所需数量的许可证。
      *
-     * @param rateLimiter the RateLimiter to get permission from
-     * @param permits     number of permits we have to acquire
+     * @param rateLimiter 从中获取权限的RateLimit
+     * @param permits     我们必须获得的许可证数量
      * @throws RequestNotPermitted                 if waiting time elapsed before a permit was
      *                                             acquired.
      * @throws AcquirePermissionCancelledException if thread was interrupted during permission wait
      */
     static void waitForPermission(final RateLimiter rateLimiter, int permits) {
+        //
         boolean permission = rateLimiter.acquirePermission(permits);
+
         if (Thread.currentThread().isInterrupted()) {
             throw new AcquirePermissionCancelledException();
         }
+        // 如果没有权限 会抛出异常
         if (!permission) {
             throw RequestNotPermitted.createRequestNotPermitted(rateLimiter);
         }
@@ -599,10 +607,9 @@ public interface RateLimiter {
     }
 
     /**
-     * Reserves the given number permits from this rate limiter and returns nanoseconds you should
-     * wait for it. If returned long is negative, it means that you failed to reserve permission,
-     * possibly your  {@link RateLimiterConfig#getTimeoutDuration()} is less then time to wait for
-     * permission.
+     * 从这个速率限制器中保留给定的数量许可，并返回纳秒
+     * 等待。如果返回的long为负数，则表示您未能保留权限，
+     * 可能您的{@link RateLimiterConfig#getTimeoutDuration（）}少于等待的时间准许
      *
      * @param permits number of permits - use for systems where 1 call != 1 permit
      * @return {@code long} amount of nanoseconds you should wait for reserved permissions. if

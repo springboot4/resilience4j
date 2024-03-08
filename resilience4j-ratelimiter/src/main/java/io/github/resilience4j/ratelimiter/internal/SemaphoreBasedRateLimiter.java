@@ -167,9 +167,11 @@ public class SemaphoreBasedRateLimiter implements RateLimiter {
     @Override
     public boolean acquirePermission(int permits) {
         try {
+            // 获取指定数量的许可
             boolean success = semaphore
                 .tryAcquire(permits, rateLimiterConfig.get().getTimeoutDuration().toNanos(),
                     TimeUnit.NANOSECONDS);
+
             publishRateLimiterAcquisitionEvent(success, permits);
             return success;
         } catch (InterruptedException e) {

@@ -155,6 +155,7 @@ public class RetryImpl<T> implements Retry {
         @Override
         public void onComplete() {
             totalAttemptsCounter.increment();
+
             int currentNumOfAttempts = numOfAttempts.get();
             if (currentNumOfAttempts > 0 && currentNumOfAttempts < maxAttempts) {
                 succeededAfterRetryCounter.increment();
